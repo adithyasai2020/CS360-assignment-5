@@ -1,0 +1,27 @@
+body {
+    margin: 0;
+    padding: 0;
+    align-items: center;
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0; /* Set the background color for the entire page */
+    line-height: 1.5;
+  }
+  
+  /* Center-align the content using flexbox */
+  #container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh; /* Make the container full viewport height */
+    
+  }
+
+  
+  /* Style the box containing your HTML elements */
+  #content-box {
+    background-color: lightblue; /* Set the background color of the content box */
+    padding: 10px; /* Add some padding for spacing */
+    border-radius: 15px; /*Add rounded corners */
+    border: 1px solid #000;
+    
+  }

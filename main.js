@@ -24,12 +24,14 @@ var objVertexNormalBuffer;
 var objVertexIndexBuffer;
 
 var uDiffuseTermLocation;
+var ulightPositionLocation;
 
 var vMatrix = mat4.create(); // view matrix
 var mMatrix = mat4.create(); // model matrix
 var pMatrix = mat4.create(); //projection matrix
 
 var eyePos = [0.0, 2.0, 3.5];
+var lightPosition =  [0.0, 5.0, 2.0];
 
 // Inpur JSON model file to load
 input_JSON = "teapot.json";
@@ -77,7 +79,7 @@ uniform vec4 diffuseTerm;
 
 in mat4 uV, uM;
 in vec4 posInEyeSpace;
-vec3 lightPosition = vec3(0.0, 5.0, 2.0);
+uniform vec3 lightPosition;
 
 in vec3 norm;
 
@@ -323,6 +325,7 @@ function drawObject(color) {
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, objVertexIndexBuffer);
 
   gl.uniform4fv(uDiffuseTermLocation, color);
+  gl.uniform3fv(ulightPositionLocation, lightPosition);
   gl.uniformMatrix4fv(uMMatrixLocation, false, mMatrix);
   gl.uniformMatrix4fv(uVMatrixLocation, false, vMatrix);
   gl.uniformMatrix4fv(uPMatrixLocation, false, pMatrix);
@@ -388,60 +391,11 @@ function drawScene() {
 
 }
 
-function onMouseDown(event) {
-  document.addEventListener("mousemove", onMouseMove, false);
-  document.addEventListener("mouseup", onMouseUp, false);
-  document.addEventListener("mouseout", onMouseOut, false);
 
-  if (
-    event.layerX <= canvas.width &&
-    event.layerX >= 0 &&
-    event.layerY <= canvas.height &&
-    event.layerY >= 0
-  ) {
-    prevMouseX = event.clientX;
-    prevMouseY = canvas.height - event.clientY;
-  }
-}
-
-function onMouseMove(event) {
-  // make mouse interaction only within canvas
-  if (
-    event.layerX <= canvas.width &&
-    event.layerX >= 0 &&
-    event.layerY <= canvas.height &&
-    event.layerY >= 0
-  ) {
-    var mouseX = event.clientX;
-    var diffX = mouseX - prevMouseX;
-    zAngle = zAngle + diffX / 5;
-    prevMouseX = mouseX;
-
-    var mouseY = canvas.height - event.clientY;
-    var diffY = mouseY - prevMouseY;
-    yAngle = yAngle - diffY / 5;
-    prevMouseY = mouseY;
-
-    drawScene();
-  }
-}
-
-function onMouseUp(event) {
-  document.removeEventListener("mousemove", onMouseMove, false);
-  document.removeEventListener("mouseup", onMouseUp, false);
-  document.removeEventListener("mouseout", onMouseOut, false);
-}
-
-function onMouseOut(event) {
-  document.removeEventListener("mousemove", onMouseMove, false);
-  document.removeEventListener("mouseup", onMouseUp, false);
-  document.removeEventListener("mouseout", onMouseOut, false);
-}
 
 // This is the entry point from the html
 function webGLStart() {
   canvas = document.getElementById("simpleLoadObjMesh");
-  document.addEventListener("mousedown", onMouseDown, false);
 
   initGL(canvas);
 
@@ -464,6 +418,7 @@ function webGLStart() {
   uPMatrixLocation = gl.getUniformLocation(shaderProgram, "uPMatrix");
   uVMatrixLocation = gl.getUniformLocation(shaderProgram, "uVMatrix");
   uDiffuseTermLocation = gl.getUniformLocation(shaderProgram, "diffuseTerm");
+  ulightPositionLocation = gl.getUniformLocation(shaderProgram, "lightPosition");
 
   //enable the attribute arrays
   gl.enableVertexAttribArray(aPositionLocation);
