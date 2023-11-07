@@ -25,3 +25,18 @@ body {
     border: 1px solid #000;
     
   }
+  
+  #mode-text {
+    font-weight: 900;
+  }
+
+  button {
+    margin: 5px; /* Add margin for spacing between buttons */
+    cursor: pointer; /* Change cursor on hover */
+    border-radius: 1px; /* Add rounded corners to buttons */
+    transition: background-color 0.3s; /* Add a smooth transition effect */
+}
+
+button:hover {
+    background-color: #00b300; /* Change background color to green on hover */
+}

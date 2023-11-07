@@ -396,6 +396,15 @@ function drawScene() {
 // This is the entry point from the html
 function webGLStart() {
   canvas = document.getElementById("simpleLoadObjMesh");
+  const p = document.getElementById("phong");
+  const ps = document.getElementById("phong-shadow");
+  const pr = document.getElementById("phong-reflection");
+  const psr = document.getElementById("phong-shadow-reflection");
+
+    // Add a click event listener to the button
+  
+
+  
 
   initGL(canvas);
 
@@ -426,4 +435,51 @@ function webGLStart() {
 
   //initialize buffers for the square
   initObject();
+
+  p.addEventListener("click", function() {
+    console.log("phong");
+  });
+  ps.addEventListener("click", function() {
+    console.log("phong-shadow");
+  });
+  pr.addEventListener("click", function() {
+    console.log("phong-reflection");
+  });
+  psr.addEventListener("click", function() {
+    console.log("phong-shadow-reflection");
+  });
+
+  // Get a reference to the "Button 1" element by its ID
+
+  // Get references to the "Move Light" and "Bounce Limit" sliders and their associated value display elements by their IDs
+    const moveLightSlider = document.getElementById("moveLight");
+    const moveLightValue = document.getElementById("moveLightValue");
+    const bounceLimitSlider = document.getElementById("bounceLimit");
+    const bounceLimitValue = document.getElementById("bounceLimitValue");
+
+    // Add event listeners to the sliders to track value changes
+    moveLightSlider.addEventListener("input", function() {
+        // Execute JavaScript commands when the "Move Light" slider value changes
+        const value = moveLightSlider.value;
+        // Update the value display element
+        moveLightValue.textContent = value;
+        lightPosition[0] = value;
+        drawScene();
+        
+        // Add your custom logic here, using the updated slider value
+        // For example, you can update a 3D scene based on the "Move Light" slider value.
+    });
+
+    bounceLimitSlider.addEventListener("input", function() {
+        // Execute JavaScript commands when the "Bounce Limit" slider value changes
+        const value = bounceLimitSlider.value;
+        // Update the value display element
+        bounceLimitValue.textContent = value;
+        
+        // Add your custom logic here, using the updated slider value
+        // For example, you can adjust a physics simulation based on the "Bounce Limit" slider value.
+    });
+
+    
+
 }
