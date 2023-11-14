@@ -1,452 +1,748 @@
-///////////////////////////////////////////////////////////
-//  A simple WebGL program to show how to load JSON model
-//
-
-var gl;
-var canvas;
-var matrixStack = [];
-
-var zAngle = 0.0;
-var yAngle = 0.0;
-
-var prevMouseX = 0;
-var prevMouseY = 0;
-var aPositionLocation;
-var aNormalLocation;
-var uVMatrixLocation;
-var uMMatrixLocation;
-var uPMatrixLocation;
+const canvas = document.getElementById('canvas');
+const gl = canvas.getContext('webgl');
 
 
+var lightPosition = [0.0, 9.5, 8.0];
+var bounceLimit = 2;
+var needReflection = 0.0;
 
-var objVertexPositionBuffer;
-var objVertexNormalBuffer;
-var objVertexIndexBuffer;
+if (!gl) {
+    console.error('WebGL is not supported in your browser');
+}
 
-var uDiffuseTermLocation;
-var ulightPositionLocation;
+// Shader sources
 
-var vMatrix = mat4.create(); // view matrix
-var mMatrix = mat4.create(); // model matrix
-var pMatrix = mat4.create(); //projection matrix
-
-var eyePos = [0.0, 2.0, 3.5];
-var lightPosition =  [0.0, 5.0, 2.0];
-
-// Inpur JSON model file to load
-input_JSON = "teapot.json";
-
-////////////////////////////////////////////////////////////////////
-const vertexShaderCode = `#version 300 es
-in vec3 aPosition;
-
-uniform mat4 uMMatrix;
-uniform mat4 uPMatrix;
-uniform mat4 uVMatrix;
-out vec4 posInEyeSpace;
-
-out mat4 uV, uM;
-
-
-in vec3 normal;
-out vec3 norm;
+const vertexShaderSource1 = `
+attribute vec2 vPosition;
+varying vec2 fPosition;
 
 void main() {
-  mat4 projectionModelView;
-  norm = normal;
-  uV = uVMatrix;
-  uM = uMMatrix;
+            fPosition = vPosition;
+            gl_Position = vec4(vPosition, 0.0, 1.0);
+}
+`;
 
-  
-  projectionModelView = uPMatrix*uVMatrix*uMMatrix;
-  // calculate clip space position
-  gl_Position =  projectionModelView * vec4(aPosition,1.0);
-  gl_PointSize=3.0;
+const fragmentShaderSource1 = `
+precision highp float;
+        varying vec2 fPosition;
+        uniform vec3 lightPosition;
 
-  posInEyeSpace =   uVMatrix * uMMatrix * vec4(aPosition, 1.0);
+        const int maxObjs = 10;
+        const int maxReflections = 10000;
 
-
-
-
-}`;
-
-const fragShaderCode = `#version 300 es
-precision mediump float;
-vec3 lighting;
-
-out vec4 fragColor;
-uniform vec4 diffuseTerm;
-
-in mat4 uV, uM;
-in vec4 posInEyeSpace;
-uniform vec3 lightPosition;
-
-in vec3 norm;
+        float alpha = 0.5;
+        uniform float reflections;
+        uniform float needReflection;
+        float focalLength = 2.0;
 
 
+        struct Sphere {
+            vec3 center;
+            float radius;
+            vec3 color;
+            float reflectivity;
+        };
 
-void main() {
+        struct Plane {
+            vec3 point;
+            vec3 normal;
+            vec3 color;
+            float reflectivity;
+        };
 
-  vec3 N = normalize((transpose(inverse(uV*uM))*vec4(norm, 1.0)).xyz);
+        struct Ray {
+            vec3 origin;
+            vec3 direction;
+            float intensity;
+        };
 
-  
-  vec3 lightDir = normalize(lightPosition - posInEyeSpace.xyz);
-  
+        struct Light {
+            vec3 position;
+            vec3 ambient, diffuse, specular;
+        };
 
-  vec3 viewDir = normalize(posInEyeSpace.xyz);
+        struct RayTracerOutput {
+            Ray reflectedRay;
+            vec3 color;
+        };
 
-  vec3 H = normalize(lightDir - viewDir);
-
-  vec3 ambient = vec3(0.0);
-  vec3 specular = pow(max(dot(N, H), 0.0), 32.0) * vec3(1.0);
-  vec3 diffuse = max(dot(N, lightDir), 0.0) * vec3(1.0);
-  lighting = ambient + specular + diffuse;
-  fragColor = vec4(diffuseTerm.rgb * lighting, diffuseTerm.a);
-}`;
-
-
+        Light light;
+        Sphere spheres[maxObjs];
+        Plane planes[maxObjs];
+        int numSpheres = 0, numPlanes = 0;
 
 
-// New sphere initialization function
-function initSphere(nslices, nstacks, radius) {
-        
-    var spVerts = [];
-    var spIndicies = [];
-    var spNormals = [];
+        const float PI = 3.14159265358979323846264;
 
-    for (var i = 0; i <= nslices; i++) {
-        var angle = (i * Math.PI) / nslices;
-        var comp1 = Math.sin(angle);
-        var comp2 = Math.cos(angle);
 
-        for (var j = 0; j <= nstacks; j++) {
-            var phi = (j * 2 * Math.PI) / nstacks;
-            var comp3 = Math.sin(phi);
-            var comp4 = Math.cos(phi);
+        // Initialization function for image 1
+        void init1() {
+            // light.position = vec3(10.0, 9.5, 0.0);
+            light.position = vec3(lightPosition);
+            numSpheres = 4;
+            numPlanes = 0;
 
-            var xcood = comp4 * comp1;
-            var ycoord = comp2;
-            var zcoord = comp3 * comp1;
+            vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
+            vec3 mainOrbitOffset = vec3(0.0, 0.6, 0.0);
 
-            spVerts.push(radius * xcood, radius * ycoord, radius * zcoord);
-            spNormals.push(xcood, ycoord, zcoord);
+            spheres[0].color = vec3(1.0, 0.0, 0.0);
+            spheres[0].reflectivity = 1.0;
+            spheres[0].center =  vec3(0.0, 0.0, 0.0);
+            spheres[0].radius = 0.4;
+
+            spheres[1].color = vec3(0.0, 0.8, 0.0);
+            spheres[1].reflectivity = 1.0;
+            spheres[1].center = vec3(-0.5, 0.0, 0.6);
+            spheres[1].radius = 0.3;
+
+            spheres[2].color = vec3(0.0, 0.0, 1.0);
+            spheres[2].reflectivity = 1.0;
+            spheres[2].center = vec3(0.5, 0.0, 0.6);
+            spheres[2].radius = 0.3;
+
+            spheres[3].color = vec3(0.7);
+            spheres[3].reflectivity = 0.9;
+            spheres[3].center = vec3(0.0, -4.0, 0.0);
+            spheres[3].radius = 3.5;
+
+            
+        }
+
+        // Initializes the objects in the world
+        void initWorld() {
+            light.ambient = vec3(0.2, 0.2, 0.2);
+            light.diffuse = vec3(0.8, 0.8, 0.8);
+            light.specular = vec3(0.95, 0.95, 0.95);
+
+            init1();
+        }
+
+
+        // Checks if the specified ray intersects the specified sphere
+        float checkIntersectSphere(Sphere sphere, Ray ray) {
+            vec3 sphereCenter = sphere.center;
+            float radius = sphere.radius;
+            vec3 cameraSource = ray.origin;
+            vec3 cameraDirection = ray.direction;
+
+            vec3 distanceFromCenter = (cameraSource - sphereCenter);
+            float B = 2.0 * dot(cameraDirection, distanceFromCenter);
+            float C = dot(distanceFromCenter, distanceFromCenter) - pow(radius, 2.0);
+            float delta = pow(B, 2.0) - 4.0 * C;
+            float t = 0.0;
+            if (delta > 0.0) {
+                float sqRoot = sqrt(delta);
+                float t1 = (-B + sqRoot) / 2.0;
+                float t2 = (-B - sqRoot) / 2.0;
+                t = min(t1, t2);
+            }
+            if (delta == 0.0) {
+                t = -B / 2.0;
+            }
+            return t;
+        }
+
+        // Checks if the specified ray intersects the specified plane
+        float checkIntersectPlane(Plane plane, Ray ray) {
+            float numerator = dot(plane.point - ray.origin, plane.normal);
+            float denominator = dot(ray.direction, plane.normal);
+            if (denominator == 0.0) return 0.0;
+            return 0.0;
+            // return numerator / denominator;
+        }
+
+        // Checks to see if a ray intersects a world object before the light
+        // Used for the shadow ray
+        bool intersectsBeforeLight(Ray ray) {
+            float distanceToLight = distance(ray.origin, light.position);
+
+            // Spheres
+            for (int i = 0; i < maxObjs; i++) {
+                if (i >= numSpheres) break;
+                float t = checkIntersectSphere(spheres[i], ray);
+                if (t > 0.0 && t < distanceToLight) {
+                    return true;
+                }
+            }
+
+            // Planes
+            for (int i = 0; i < maxObjs; i++) {
+                if (i >= numPlanes) break;
+                float t = checkIntersectPlane(planes[i], ray);
+                if (t > 0.0 && t < distanceToLight) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+
+        // Traces a ray through the world
+        // Returns a reflection ray and a calculated color
+        RayTracerOutput traceRay(Ray ray) {
+
+            // Conduct intersection testing
+            float minT = 100000.0;
+            int typeToShow = 0; // 0 for nothing, 1 for sphere, 2 for plane
+            Sphere sphere;
+            Plane plane;
+
+            // Sphere intersection testing
+            for (int i = 0; i < maxObjs; i++) {
+                if (i >= numSpheres) break;
+                float t = checkIntersectSphere(spheres[i], ray);
+                if (t > 0.0 && t < minT) {
+                    minT = t;
+                    sphere = spheres[i];
+                    typeToShow = 1;
+                }
+            }
+
+            // Plane intersection testing
+            for (int i = 0; i < maxObjs; i++) {
+                if (i >= numPlanes) break;
+                float t = checkIntersectPlane(planes[i], ray);
+                if (t > 0.0 && t < minT) {
+                    minT = t;
+                    plane = planes[i];
+                    typeToShow = 2;
+                }
+            }
+
+            // Calculate ray color & reflection
+            RayTracerOutput rayTracer;
+            vec3 color = vec3(0.0, 0.0, 0.0);
+            if (typeToShow > 0) {
+
+                // Get variables from the intersected object
+                vec3 surfacePoint = ray.origin + (minT * ray.direction);
+                vec3 surfaceNormal;
+                vec3 objColor;
+                float reflectivity;
+                if (typeToShow == 1) {
+                    surfaceNormal = normalize(surfacePoint - sphere.center);
+                    objColor = sphere.color;
+                    reflectivity = sphere.reflectivity;
+                } else if (typeToShow == 2) {
+                    surfaceNormal = plane.normal;
+                    objColor = plane.color;
+                    reflectivity = plane.reflectivity;
+                }
+
+                // Ambient light
+                color += light.ambient * objColor;
+
+                // Shadow check
+                // Only show diffuse + specular if we are not in shadow
+                vec3 L = normalize(light.position - surfacePoint);
+                Ray shadowRay;
+                shadowRay.origin = surfacePoint + 0.00001 * L;
+                shadowRay.direction = L;
+                if (!intersectsBeforeLight(shadowRay)) {
+                    vec3 N = surfaceNormal;
+
+                    // Diffuse light
+                    color += light.diffuse * objColor * max(0.0, dot(L, N));
+
+                    // Specular light
+                    float shininess = 20.0;
+                    vec3 R = reflect(-L, N);
+                    vec3 C = normalize(ray.origin - surfacePoint);
+                    float specular = pow(max(dot(R, C), 0.0), shininess);
+                    color += light.specular * specular * reflectivity;
+                }
+
+                //Reflection ray
+                if(needReflection > 0.0){
+                    Ray reflectionRay;
+                    vec3 reflection = reflect(ray.direction, surfaceNormal);
+                    reflectionRay.origin = surfacePoint + 0.00001 * reflection;
+                    reflectionRay.direction = reflection;
+                    reflectionRay.intensity = ray.intensity * reflectivity;
+                    rayTracer.reflectedRay = reflectionRay;
+
+                }
+                
+            }
+            rayTracer.color = color * ray.intensity;
+
+            return rayTracer;
+        }
+
+
+        void main() {
+
+            // Initialize the world objects
+            initWorld();
+
+            // Create the first ray
+            Ray currRay;
+            currRay.origin = vec3(0.0, 0.0, focalLength);
+            currRay.direction = normalize(vec3(fPosition, -focalLength));
+            currRay.intensity = 1.0;
+
+            // Calculate the final color
+            vec3 color = vec3(0.0, 0.0, 0.0);
+            for (int i = 0; i <= maxReflections; i++) {
+                if (i >= int(reflections)) break;
+                RayTracerOutput rayTracer = traceRay(currRay);
+                color += rayTracer.color;
+                currRay = rayTracer.reflectedRay;
+            }
+            gl_FragColor = vec4(color, 1.0);
+        }
+`;
+
+
+function flatten( v )
+{
+    if ( v.matrix === true ) {
+        v = transpose( v );
+    }
+
+    var n = v.length;
+    var elemsAreArrays = false;
+
+    if ( Array.isArray(v[0]) ) {
+        elemsAreArrays = true;
+        n *= v[0].length;
+    }
+
+    var floats = new Float32Array( n );
+
+    if ( elemsAreArrays ) {
+        var idx = 0;
+        for ( var i = 0; i < v.length; ++i ) {
+            for ( var j = 0; j < v[i].length; ++j ) {
+                floats[idx++] = v[i][j];
+            }
+        }
+    }
+    else {
+        for ( var i = 0; i < v.length; ++i ) {
+            floats[i] = v[i];
         }
     }
 
-  // now compute the indices here
-  for (var i = 0; i < nslices; i++) {
-    for (var j = 0; j < nstacks; j++) {
-      var id1 = i * (nstacks + 1) + j;
-      var id2 = id1 + nstacks + 1;
+    return floats;
+}
 
-      spIndicies.push(id1, id2, id1 + 1);
-      spIndicies.push(id2, id2 + 1, id1 + 1);
+const glBounds = [
+    -1, 1,  // Upper left
+    1, 1,   // Upper right
+    -1, -1, // Lower left
+    1, -1,  // Lower right
+];
+// Compile shaders and create program
+const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource1);
+const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource1);
+const program = createProgram(gl, vertexShader, fragmentShader);
+
+// Find attribute and uniform locations
+// const positionLocation = gl.getAttribLocation(program, 'a_position');
+// const foregroundLocation = gl.getUniformLocation(program, 'u_foreground');
+// const backgroundLocation = gl.getUniformLocation(program, 'u_background');
+// const alphaLocation = gl.getUniformLocation(program, "alpha");
+// const greyOrSepiaLocation = gl.getUniformLocation(program, "greyOrSepia");
+// const contrastLocation = gl.getUniformLocation(program, "contrast");
+// const brightnessLocation = gl.getUniformLocation(program, "brightness");
+// const shapeLocation = gl.getUniformLocation(program, "shape");
+// const kernelLocation = gl.getUniformLocation(program, "kernel");
+const lightPositionLocation = gl.getUniformLocation(program, 'lightPosition');
+const bounceLimitLocation = gl.getUniformLocation(program, "reflections");
+const needReflectLocation = gl.getUniformLocation(program, "needReflection");
+
+// Create buffer for a square
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+const vPosBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vPosBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, flatten(glBounds), gl.STATIC_DRAW);
+const pos = gl.getAttribLocation(program, 'vPosition');
+gl.enableVertexAttribArray(pos);
+gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+
+// // Create texture objects
+// const foregroundTexture = createTexture(gl);
+// const backgroundTexture = createTexture(gl);
+
+// // Handle file uploads
+// document.getElementById('foregroundImage').addEventListener('change', handleForegroundUpload);
+// document.getElementById('backgroundImage').addEventListener('change', handleBackgroundUpload);
+
+// function handleForegroundUpload(event) {
+//     loadTexture(gl, foregroundTexture, event.target.files[0], foregroundLocation);
+// }
+
+// function handleBackgroundUpload(event) {
+//     loadTexture(gl, backgroundTexture, event.target.files[0], backgroundLocation);
+// }
+
+// Render function
+function render() {
+
+    canvas.width = 400; // Set the initial canvas size
+    canvas.height = 400;    
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.useProgram(program);
+
+    // gl.enableVertexAttribArray(positionLocation);
+    // gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    // gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+    // gl.activeTexture(gl.TEXTURE0);
+    // gl.bindTexture(gl.TEXTURE_2D, foregroundTexture);
+    // gl.uniform1i(foregroundLocation, 0);
+    
+    gl.uniform3fv(lightPositionLocation, lightPosition);
+    gl.uniform1f(bounceLimitLocation, bounceLimit);
+    gl.uniform1f(needReflectLocation, needReflection);
+    // gl.uniform1f(alphaLocation, 0.0);
+    
+    // var to_send = 0.0;
+    // gl.uniform1f(greyOrSepiaLocation, to_send);
+
+    // gl.uniform1f(contrastLocation, contrastValue);
+    // gl.uniform1f(brightnessLocation, brightnessValue);
+    // gl.uniform2f(shapeLocation, canvas.width*1.0, canvas.height*1.0);
+    // if(isSmooth){
+    //     gl.uniformMatrix3fv(kernelLocation, false, [
+    //         1.0, 1.0, 1.0,
+    //         1.0, 1.0, 1.0,
+    //         1.0, 1.0, 1.0
+    //       ].map(function(item) { return item/9.0 } ));
+
+    // }
+    // else if(isSharpen){
+    //     gl.uniformMatrix3fv(kernelLocation, false, [
+    //         0.0, -1.0, 0.0,
+    //         -1.0, 5.0, -1.0,
+    //         0.0, -1.0, 0.0
+    //       ]);
+    // }
+    // else if(isGradient){
+    //     gl.uniformMatrix3fv(kernelLocation, false, [
+    //         0.0, 0.0, 0.0,
+    //         0.0, 2.0, 0.0,
+    //         0.0, 0.0, 0.0
+    //       ]);
+    // }
+    // else if(isLaplacian){
+    //     gl.uniformMatrix3fv(kernelLocation, false, [
+    //         0.0, -1.0, 0.0,
+    //         -1.0, 4.0, -1.0,
+    //         0.0, -1.0, 0.0
+    //       ]);
+    // }
+    // else{
+    //     gl.uniformMatrix3fv(kernelLocation, false, [
+    //         0.0, 0.0, 0.0,
+    //         0.0, 1.0, 0.0,
+    //         0.0, 0.0, 0.0
+    //       ]);
+        
+    // }
+    // gl.activeTexture(gl.TEXTURE1);
+    // gl.bindTexture(gl.TEXTURE_2D, backgroundTexture);
+    // gl.uniform1i(backgroundLocation, 1);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+
+// Utility functions for WebGL
+function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
     }
-  }
-  return {
-    "vertexPositions":spVerts,
-    "vertexNormals":spNormals,
-    "indices":spIndicies
-  };
+
+    return shader;
 }
 
-function initSphereBuffer() {
-  var nslices = 50;
-  var nstacks = 50;
-  var radius = 1.0;
+function createProgram(gl, vertexShader, fragmentShader) {
+    const program = gl.createProgram();
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
 
-  initSphere(nslices, nstacks, radius);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error('Unable to initialize the shader program: ' + gl.getProgramInfoLog(program));
+        return null;
+    }
 
-  // buffer for vertices
-  spBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, spBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(spVerts), gl.STATIC_DRAW);
-  spBuf.itemSize = 3;
-  spBuf.numItems = spVerts.length / 3;
-
-  // buffer for indices
-  spIndexBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, spIndexBuf);
-  gl.bufferData(
-    gl.ELEMENT_ARRAY_BUFFER,
-    new Uint32Array(spIndicies),
-    gl.STATIC_DRAW
-  );
-  spIndexBuf.itemsize = 1;
-  spIndexBuf.numItems = spIndicies.length;
-
-  // buffer for normals
-  spNormalBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, spNormalBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(spNormals), gl.STATIC_DRAW);
-  spNormalBuf.itemSize = 3;
-  spNormalBuf.numItems = spNormals.length / 3;
+    return program;
 }
 
+// function createTexture(gl) {
+//     const texture = gl.createTexture();
+//     gl.bindTexture(gl.TEXTURE_2D, texture);
+
+//     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+//     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+//     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+//     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+//     return texture;
+// }
+
+// function loadTexture(gl, texture, file, location) {
+//     const image = new Image();
+//     image.src = URL.createObjectURL(file);
+
+//     image.onload = function () {
+
+        
+//         gl.bindTexture(gl.TEXTURE_2D, texture);
+//         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+//         render();
+//     };
+// }
 
 
 
-function vertexShaderSetup(vertexShaderCode) {
-  shader = gl.createShader(gl.VERTEX_SHADER);
-  gl.shaderSource(shader, vertexShaderCode);
-  gl.compileShader(shader);
-  // Error check whether the shader is compiled correctly
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    alert(gl.getShaderInfoLog(shader));
-    return null;
-  }
-  return shader;
-}
+// // Add event listeners to listen for changes
+// contrastSlider.addEventListener("input", function() {
+//     contrastValue = parseFloat(contrastSlider.value);
+//     // You can perform the necessary updates or actions here
+//     console.log("Contrast ", contrastValue);
+//     render();
+// });
 
-function fragmentShaderSetup(fragShaderCode) {
-  shader = gl.createShader(gl.FRAGMENT_SHADER);
-  gl.shaderSource(shader, fragShaderCode);
-  gl.compileShader(shader);
-  // Error check whether the shader is compiled correctly
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    alert(gl.getShaderInfoLog(shader));
-    return null;
-  }
-  return shader;
-}
+// brightnessSlider.addEventListener("input", function() {
+//     brightnessValue = parseFloat(brightnessSlider.value);
+//     // You can perform the necessary updates or actions here
+//     console.log("Brightness ", brightnessValue);
+//     render();
+// });
 
-function initShaders() {
-  shaderProgram = gl.createProgram();
-
-  var vertexShader = vertexShaderSetup(vertexShaderCode);
-  var fragmentShader = fragmentShaderSetup(fragShaderCode);
-
-  // attach the shaders
-  gl.attachShader(shaderProgram, vertexShader);
-  gl.attachShader(shaderProgram, fragmentShader);
-  //link the shader program
-  gl.linkProgram(shaderProgram);
-
-  // check for compilation and linking status
-  if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-    console.log(gl.getShaderInfoLog(vertexShader));
-    console.log(gl.getShaderInfoLog(fragmentShader));
-  }
-
-  //finally use the program.
-  gl.useProgram(shaderProgram);
-
-  return shaderProgram;
-}
-
-function initGL(canvas) {
-  try {
-    gl = canvas.getContext("webgl2"); // the graphics webgl2 context
-    gl.viewportWidth = canvas.width; // the width of the canvas
-    gl.viewportHeight = canvas.height; // the height
-  } catch (e) {}
-  if (!gl) {
-    alert("WebGL initialization failed");
-  }
-}
-
-function degToRad(degrees) {
-  return (degrees * Math.PI) / 180;
-}
-
-function pushMatrix(stack, m) {
-  //necessary because javascript only does shallow push
-  var copy = mat4.create(m);
-  stack.push(copy);
-}
-
-function popMatrix(stack) {
-  if (stack.length > 0) return stack.pop();
-  else console.log("stack has no matrix to pop!");
-}
-
-function initObject() {
-    objData = initSphere(100, 100, 5.0);
-    processObject(objData);
+// grayscaleCheckbox.addEventListener("change", function() {
+//     isGrayscale = grayscaleCheckbox.checked;
+//     if(isGrayscale){
+//         sepiaCheckbox.checked = false;
+//         isSepia = false;
+        
+//     }
+//     // You can perform the necessary updates or actions here
     
+//     render();
+//     console.log("grayscale", isGrayscale);
+// });
+
+// sepiaCheckbox.addEventListener("change", function() {
+//     isSepia = sepiaCheckbox.checked;
+//     if(isSepia){
+//         grayscaleCheckbox.checked = false;
+//         isGrayscale = false;
+        
+//     }
     
-}
+//     render();
+//     console.log("Sepia", isSepia);
+//     // You can perform the necessary updates or actions here
+// });
+// // Add event listeners to listen for changes
+// backgroundRadio.addEventListener("change", function() {
+//     if (backgroundRadio.checked) {
+//         selectedMode = "background";
+//         console.log(selectedMode);
+//         // You can perform the necessary updates or actions here
+//     }
+//     render();
+// });
 
-function processObject(objData) {
-  objVertexPositionBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, objVertexPositionBuffer);
-  gl.bufferData(
-    gl.ARRAY_BUFFER,
-    new Float32Array(objData.vertexPositions),
-    gl.STATIC_DRAW
-  );
-  objVertexPositionBuffer.itemSize = 3;
-  objVertexPositionBuffer.numItems = objData.vertexPositions.length / 3;
+// alphaBlendedRadio.addEventListener("change", function() {
+//     if (alphaBlendedRadio.checked) {
+//         selectedMode = "alpha-blended";
+//         console.log(selectedMode);
+//         // You can perform the necessary updates or actions here
+//     }
+//     render();
+// });
 
-  objVertexNormalBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, objVertexNormalBuffer);
-  gl.bufferData(
-    gl.ARRAY_BUFFER,
-    new Float32Array(objData.vertexNormals),
-    gl.STATIC_DRAW
-  );
-  objVertexNormalBuffer.itemSize = 3;
-  objVertexNormalBuffer.numItems = objData.vertexNormals.length / 3;
+// smoothCheckbox.addEventListener("change", function(){
+//     isSmooth = smoothCheckbox.checked;
+//     if(isSmooth){
 
-  objVertexIndexBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, objVertexIndexBuffer);
-  gl.bufferData(
-    gl.ELEMENT_ARRAY_BUFFER,
-    new Uint32Array(objData.indices),
-    gl.STATIC_DRAW
-  );
-  objVertexIndexBuffer.itemSize = 1;
-  objVertexIndexBuffer.numItems = objData.indices.length;
+//         sharpenCheckbox.checked = false;
+//         gradientCheckbox.checked = false;
+//         laplacianCheckbox.checked = false;
 
-  drawScene();
-}
+//         isSharpen = false;
+//         isGradient = false;
+//         isLaplacian = false;
 
-function drawObject(color) {
-  gl.bindBuffer(gl.ARRAY_BUFFER, objVertexPositionBuffer);
-  gl.vertexAttribPointer(
-    aPositionLocation,
-    objVertexPositionBuffer.itemSize,
-    gl.FLOAT,
-    false,
-    0,
-    0
-  );
+//     }
+//     render();
+//     console.log("Smoothen", isSmooth);
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, objVertexNormalBuffer);
-  gl.vertexAttribPointer(
-    aNormalLocation,
-    objVertexNormalBuffer.itemSize,
-    gl.FLOAT,
-    false,
-    0,
-    0
-  );
+// });
 
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, objVertexIndexBuffer);
+// sharpenCheckbox.addEventListener("change", function(){
+//     isSharpen = sharpenCheckbox.checked;
 
-  gl.uniform4fv(uDiffuseTermLocation, color);
-  gl.uniform3fv(ulightPositionLocation, lightPosition);
-  gl.uniformMatrix4fv(uMMatrixLocation, false, mMatrix);
-  gl.uniformMatrix4fv(uVMatrixLocation, false, vMatrix);
-  gl.uniformMatrix4fv(uPMatrixLocation, false, pMatrix);
+//     if(isSharpen){
 
-  gl.drawElements(
-    gl.TRIANGLES,
-    objVertexIndexBuffer.numItems,
-    gl.UNSIGNED_INT,
-    0
-  );
-}
+//         smoothCheckbox.checked = false;
+//         gradientCheckbox.checked = false;
+//         laplacianCheckbox.checked = false;
+//         isSmooth = false;
+//         isGradient = false;
+//         isLaplacian = false;
 
-//////////////////////////////////////////////////////////////////////
-//The main drawing routine
-function drawScene() {
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+//     }
+//     render();
 
-  //set up the model matrix
-  mat4.identity(mMatrix);
+//     console.log("Sharpen", isSharpen);
 
-  // set up the view matrix, multiply into the modelview matrix
-  mat4.identity(vMatrix);
-  vMatrix = mat4.lookAt(eyePos, [0, 0, 0], [0, 1, 0], vMatrix);
+// });
 
-  //set up projection matrix
-  mat4.identity(pMatrix);
-  mat4.perspective(60, 1.0, 0.01, 1000, pMatrix);
+// gradientCheckbox.addEventListener("change", function(){
+//     isGradient = gradientCheckbox.checked;
+//     if(isGradient){
 
-  mMatrix = mat4.rotate(mMatrix, degToRad(yAngle), [1, 0, 0]);
-  mMatrix = mat4.rotate(mMatrix, degToRad(zAngle), [0, 1, 0]);
+//         smoothCheckbox.checked = false;
+//         sharpenCheckbox.checked = false;
+//         laplacianCheckbox.checked = false;
 
-  //draw teapot
-  pushMatrix(matrixStack, mMatrix);
-  color = [1, 0, 0, 1.0];
-  mMatrix = mat4.scale(mMatrix, [0.12, 0.12, 0.12]);
-  drawObject(color);
-  mMatrix = popMatrix(matrixStack);
+//         isSmooth = false;
+//         isSharpen = false;
+//         isLaplacian = false;
 
+//     }
+//     render();
+//     console.log("Gradient", isGradient);
 
-  pushMatrix(matrixStack, mMatrix);
-  color = [0, 1, 0, 1.0];
-  mMatrix = mat4.translate(mMatrix, [1, 0, 0.75])
-  mMatrix = mat4.scale(mMatrix, [0.12, 0.12, 0.12]);
-  drawObject(color);
-  mMatrix = popMatrix(matrixStack);
+// });
 
-  pushMatrix(matrixStack, mMatrix);
-  color = [0, 0, 1, 1.0];
-  mMatrix = mat4.translate(mMatrix, [-1, 0, 0.75])
-  mMatrix = mat4.scale(mMatrix, [0.12, 0.12, 0.12]);
-  drawObject(color);
-  mMatrix = popMatrix(matrixStack);
+// laplacianCheckbox.addEventListener("change", function(){
+//     isLaplacian = laplacianCheckbox.checked;
+//     if(isLaplacian){
 
+//         smoothCheckbox.checked = false;
+//         sharpenCheckbox.checked = false;
+//         gradientCheckbox.checked = false;
 
-  pushMatrix(matrixStack, mMatrix);
-  color = [1, 1, 1, 1];
-  mMatrix = mat4.translate(mMatrix, [0, -5, 0.5])
-  mMatrix = mat4.scale(mMatrix, [0.8, 0.8, 0.8]);
-  drawObject(color);
-  mMatrix = popMatrix(matrixStack);
+//         isSmooth = false;
+//         isSharpen = false;
+//         isGradient = false;
 
+//     }
+//     render();
+//     console.log("Laplacian", isLaplacian);
+
+// });
+
+// resetButton.addEventListener("click", () => {
+//     // Reset all radio buttons by unchecking them
+//     radioButtons.forEach((radio) => {
+//       radio.checked = false;
+//     });
+//      radioButtons[0].checked = true;
+//      selectedMode = "background";
+    
+//     // Reset all checkboxes by unchecking them
+//     checkboxes.forEach((checkbox) => {
+//       checkbox.checked = false;
+//     });
+    
+//     isSmooth = false;
+//     isSharpen = false;
+//     isGradient = false;
+//     isLaplacian = false;
+//     isGrayscale = false;
+//     isSepia = false;
+//     // Reset sliders to their default values
+//     contrastSlider.value = 0.5; // Set the default value for the contrast slider
+//     brightnessSlider.value = 0.0; // Set the default value for the brightness slider
+//     render();
+// });
 
 
-}
+// const saveButton = document.getElementById('saveScreenshot');
+// const downloadLink = document.getElementById('downloadLink');
+// saveButton.addEventListener('click', () => {
+//   canvas.toBlob((blob) => {
+//     saveBlob(blob, `screencapture-${canvas.width}x${canvas.height}.jpg`);
+//   });
+// });
+ 
+// const saveBlob = (function() {
+//   const a = document.createElement('a');
+//   document.body.appendChild(a);
+//   a.style.display = 'none';
+//   return function saveData(blob, fileName) {
+//      const url = window.URL.createObjectURL(blob);
+//      a.href = url;
+//      a.download = fileName;
+//      a.click();
+//   };
+// // }());
+// const saveScreenshotButton = document.getElementById("saveScreenshot");
+
+// // Add a click event listener to the button
+// saveScreenshotButton.addEventListener("click", saveScreenshot);
+// function saveScreenshot() {
+//     render();
+//     // Get the canvas element by its ID
+//     const canvas = document.getElementById("canvas");
+
+//     // Create an "a" element to trigger the download
+//     const a = document.createElement("a");
+
+//     // Convert the canvas content to a data URL with JPEG format
+//     const dataURL = canvas.toDataURL("image/jpeg");
+
+//     // Set the "href" attribute of the "a" element to the data URL
+//     a.href = dataURL;
+
+//     // Set the "download" attribute and file name
+//     a.download = "screenshot.jpg";
+
+//     // Trigger a click event on the "a" element to start the download
+//     a.click();
+// }
+
+// // Start rendering loop
 
 
+render();
 
-// This is the entry point from the html
-function webGLStart() {
-  canvas = document.getElementById("simpleLoadObjMesh");
-  const p = document.getElementById("phong");
-  const ps = document.getElementById("phong-shadow");
-  const pr = document.getElementById("phong-reflection");
-  const psr = document.getElementById("phong-shadow-reflection");
+const p = document.getElementById("phong");
+const ps = document.getElementById("phong-shadow");
+const pr = document.getElementById("phong-reflection");
+const psr = document.getElementById("phong-shadow-reflection");
 
-    // Add a click event listener to the button
-  
 
-  
-
-  initGL(canvas);
-
-  gl.enable(gl.DEPTH_TEST);
-
-  gl.enable(gl.SCISSOR_TEST);
-
-  shaderProgram = initShaders();
-
-  gl.enable(gl.DEPTH_TEST);
-
-  
-  gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-  gl.clearColor(0, 0, 0, 1.0);
-
-  //get locations of attributes declared in the vertex shader
-  aPositionLocation = gl.getAttribLocation(shaderProgram, "aPosition");
-  aNormalLocation = gl.getAttribLocation(shaderProgram, "normal");
-  uMMatrixLocation = gl.getUniformLocation(shaderProgram, "uMMatrix");
-  uPMatrixLocation = gl.getUniformLocation(shaderProgram, "uPMatrix");
-  uVMatrixLocation = gl.getUniformLocation(shaderProgram, "uVMatrix");
-  uDiffuseTermLocation = gl.getUniformLocation(shaderProgram, "diffuseTerm");
-  ulightPositionLocation = gl.getUniformLocation(shaderProgram, "lightPosition");
-
-  //enable the attribute arrays
-  gl.enableVertexAttribArray(aPositionLocation);
-  gl.enableVertexAttribArray(aNormalLocation);
-
-  //initialize buffers for the square
-  initObject();
-
-  p.addEventListener("click", function() {
+p.addEventListener("click", function() {
     console.log("phong");
+    needReflection = 0.0
+    render();
   });
   ps.addEventListener("click", function() {
     console.log("phong-shadow");
+    needReflection = 0.0
+    render();
   });
   pr.addEventListener("click", function() {
     console.log("phong-reflection");
+    needReflection = 1.0
+    render();
   });
   psr.addEventListener("click", function() {
     console.log("phong-shadow-reflection");
+    needReflection = 1.0
+    render();
   });
 
   // Get a reference to the "Button 1" element by its ID
@@ -464,7 +760,7 @@ function webGLStart() {
         // Update the value display element
         moveLightValue.textContent = value;
         lightPosition[0] = value;
-        drawScene();
+        render();
         
         // Add your custom logic here, using the updated slider value
         // For example, you can update a 3D scene based on the "Move Light" slider value.
@@ -473,13 +769,10 @@ function webGLStart() {
     bounceLimitSlider.addEventListener("input", function() {
         // Execute JavaScript commands when the "Bounce Limit" slider value changes
         const value = bounceLimitSlider.value;
-        // Update the value display element
+        bounceLimit = value
         bounceLimitValue.textContent = value;
+        render();
         
         // Add your custom logic here, using the updated slider value
         // For example, you can adjust a physics simulation based on the "Bounce Limit" slider value.
     });
-
-    
-
-}
