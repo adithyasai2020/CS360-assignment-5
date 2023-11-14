@@ -30,7 +30,6 @@ precision highp float;
         const int maxObjs = 10;
         const int maxReflections = 10000;
 
-        float alpha = 0.5;
         uniform float reflections;
         uniform float needReflection;
         float focalLength = 2.0;
@@ -338,25 +337,9 @@ const glBounds = [
 const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource1);
 const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource1);
 const program = createProgram(gl, vertexShader, fragmentShader);
-
-// Find attribute and uniform locations
-// const positionLocation = gl.getAttribLocation(program, 'a_position');
-// const foregroundLocation = gl.getUniformLocation(program, 'u_foreground');
-// const backgroundLocation = gl.getUniformLocation(program, 'u_background');
-// const alphaLocation = gl.getUniformLocation(program, "alpha");
-// const greyOrSepiaLocation = gl.getUniformLocation(program, "greyOrSepia");
-// const contrastLocation = gl.getUniformLocation(program, "contrast");
-// const brightnessLocation = gl.getUniformLocation(program, "brightness");
-// const shapeLocation = gl.getUniformLocation(program, "shape");
-// const kernelLocation = gl.getUniformLocation(program, "kernel");
 const lightPositionLocation = gl.getUniformLocation(program, 'lightPosition');
 const bounceLimitLocation = gl.getUniformLocation(program, "reflections");
 const needReflectLocation = gl.getUniformLocation(program, "needReflection");
-
-// Create buffer for a square
-const positionBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
 const vPosBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, vPosBuffer);
@@ -364,22 +347,6 @@ gl.bufferData(gl.ARRAY_BUFFER, flatten(glBounds), gl.STATIC_DRAW);
 const pos = gl.getAttribLocation(program, 'vPosition');
 gl.enableVertexAttribArray(pos);
 gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
-
-// // Create texture objects
-// const foregroundTexture = createTexture(gl);
-// const backgroundTexture = createTexture(gl);
-
-// // Handle file uploads
-// document.getElementById('foregroundImage').addEventListener('change', handleForegroundUpload);
-// document.getElementById('backgroundImage').addEventListener('change', handleBackgroundUpload);
-
-// function handleForegroundUpload(event) {
-//     loadTexture(gl, foregroundTexture, event.target.files[0], foregroundLocation);
-// }
-
-// function handleBackgroundUpload(event) {
-//     loadTexture(gl, backgroundTexture, event.target.files[0], backgroundLocation);
-// }
 
 // Render function
 function render() {
@@ -391,65 +358,10 @@ function render() {
 
     gl.useProgram(program);
 
-    // gl.enableVertexAttribArray(positionLocation);
-    // gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    // gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-    // gl.activeTexture(gl.TEXTURE0);
-    // gl.bindTexture(gl.TEXTURE_2D, foregroundTexture);
-    // gl.uniform1i(foregroundLocation, 0);
-    
     gl.uniform3fv(lightPositionLocation, lightPosition);
     gl.uniform1f(bounceLimitLocation, bounceLimit);
     gl.uniform1f(needReflectLocation, needReflection);
-    // gl.uniform1f(alphaLocation, 0.0);
     
-    // var to_send = 0.0;
-    // gl.uniform1f(greyOrSepiaLocation, to_send);
-
-    // gl.uniform1f(contrastLocation, contrastValue);
-    // gl.uniform1f(brightnessLocation, brightnessValue);
-    // gl.uniform2f(shapeLocation, canvas.width*1.0, canvas.height*1.0);
-    // if(isSmooth){
-    //     gl.uniformMatrix3fv(kernelLocation, false, [
-    //         1.0, 1.0, 1.0,
-    //         1.0, 1.0, 1.0,
-    //         1.0, 1.0, 1.0
-    //       ].map(function(item) { return item/9.0 } ));
-
-    // }
-    // else if(isSharpen){
-    //     gl.uniformMatrix3fv(kernelLocation, false, [
-    //         0.0, -1.0, 0.0,
-    //         -1.0, 5.0, -1.0,
-    //         0.0, -1.0, 0.0
-    //       ]);
-    // }
-    // else if(isGradient){
-    //     gl.uniformMatrix3fv(kernelLocation, false, [
-    //         0.0, 0.0, 0.0,
-    //         0.0, 2.0, 0.0,
-    //         0.0, 0.0, 0.0
-    //       ]);
-    // }
-    // else if(isLaplacian){
-    //     gl.uniformMatrix3fv(kernelLocation, false, [
-    //         0.0, -1.0, 0.0,
-    //         -1.0, 4.0, -1.0,
-    //         0.0, -1.0, 0.0
-    //       ]);
-    // }
-    // else{
-    //     gl.uniformMatrix3fv(kernelLocation, false, [
-    //         0.0, 0.0, 0.0,
-    //         0.0, 1.0, 0.0,
-    //         0.0, 0.0, 0.0
-    //       ]);
-        
-    // }
-    // gl.activeTexture(gl.TEXTURE1);
-    // gl.bindTexture(gl.TEXTURE_2D, backgroundTexture);
-    // gl.uniform1i(backgroundLocation, 1);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
@@ -484,237 +396,6 @@ function createProgram(gl, vertexShader, fragmentShader) {
     return program;
 }
 
-// function createTexture(gl) {
-//     const texture = gl.createTexture();
-//     gl.bindTexture(gl.TEXTURE_2D, texture);
-
-//     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-//     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-//     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-//     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-//     return texture;
-// }
-
-// function loadTexture(gl, texture, file, location) {
-//     const image = new Image();
-//     image.src = URL.createObjectURL(file);
-
-//     image.onload = function () {
-
-        
-//         gl.bindTexture(gl.TEXTURE_2D, texture);
-//         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-//         render();
-//     };
-// }
-
-
-
-// // Add event listeners to listen for changes
-// contrastSlider.addEventListener("input", function() {
-//     contrastValue = parseFloat(contrastSlider.value);
-//     // You can perform the necessary updates or actions here
-//     console.log("Contrast ", contrastValue);
-//     render();
-// });
-
-// brightnessSlider.addEventListener("input", function() {
-//     brightnessValue = parseFloat(brightnessSlider.value);
-//     // You can perform the necessary updates or actions here
-//     console.log("Brightness ", brightnessValue);
-//     render();
-// });
-
-// grayscaleCheckbox.addEventListener("change", function() {
-//     isGrayscale = grayscaleCheckbox.checked;
-//     if(isGrayscale){
-//         sepiaCheckbox.checked = false;
-//         isSepia = false;
-        
-//     }
-//     // You can perform the necessary updates or actions here
-    
-//     render();
-//     console.log("grayscale", isGrayscale);
-// });
-
-// sepiaCheckbox.addEventListener("change", function() {
-//     isSepia = sepiaCheckbox.checked;
-//     if(isSepia){
-//         grayscaleCheckbox.checked = false;
-//         isGrayscale = false;
-        
-//     }
-    
-//     render();
-//     console.log("Sepia", isSepia);
-//     // You can perform the necessary updates or actions here
-// });
-// // Add event listeners to listen for changes
-// backgroundRadio.addEventListener("change", function() {
-//     if (backgroundRadio.checked) {
-//         selectedMode = "background";
-//         console.log(selectedMode);
-//         // You can perform the necessary updates or actions here
-//     }
-//     render();
-// });
-
-// alphaBlendedRadio.addEventListener("change", function() {
-//     if (alphaBlendedRadio.checked) {
-//         selectedMode = "alpha-blended";
-//         console.log(selectedMode);
-//         // You can perform the necessary updates or actions here
-//     }
-//     render();
-// });
-
-// smoothCheckbox.addEventListener("change", function(){
-//     isSmooth = smoothCheckbox.checked;
-//     if(isSmooth){
-
-//         sharpenCheckbox.checked = false;
-//         gradientCheckbox.checked = false;
-//         laplacianCheckbox.checked = false;
-
-//         isSharpen = false;
-//         isGradient = false;
-//         isLaplacian = false;
-
-//     }
-//     render();
-//     console.log("Smoothen", isSmooth);
-
-// });
-
-// sharpenCheckbox.addEventListener("change", function(){
-//     isSharpen = sharpenCheckbox.checked;
-
-//     if(isSharpen){
-
-//         smoothCheckbox.checked = false;
-//         gradientCheckbox.checked = false;
-//         laplacianCheckbox.checked = false;
-//         isSmooth = false;
-//         isGradient = false;
-//         isLaplacian = false;
-
-//     }
-//     render();
-
-//     console.log("Sharpen", isSharpen);
-
-// });
-
-// gradientCheckbox.addEventListener("change", function(){
-//     isGradient = gradientCheckbox.checked;
-//     if(isGradient){
-
-//         smoothCheckbox.checked = false;
-//         sharpenCheckbox.checked = false;
-//         laplacianCheckbox.checked = false;
-
-//         isSmooth = false;
-//         isSharpen = false;
-//         isLaplacian = false;
-
-//     }
-//     render();
-//     console.log("Gradient", isGradient);
-
-// });
-
-// laplacianCheckbox.addEventListener("change", function(){
-//     isLaplacian = laplacianCheckbox.checked;
-//     if(isLaplacian){
-
-//         smoothCheckbox.checked = false;
-//         sharpenCheckbox.checked = false;
-//         gradientCheckbox.checked = false;
-
-//         isSmooth = false;
-//         isSharpen = false;
-//         isGradient = false;
-
-//     }
-//     render();
-//     console.log("Laplacian", isLaplacian);
-
-// });
-
-// resetButton.addEventListener("click", () => {
-//     // Reset all radio buttons by unchecking them
-//     radioButtons.forEach((radio) => {
-//       radio.checked = false;
-//     });
-//      radioButtons[0].checked = true;
-//      selectedMode = "background";
-    
-//     // Reset all checkboxes by unchecking them
-//     checkboxes.forEach((checkbox) => {
-//       checkbox.checked = false;
-//     });
-    
-//     isSmooth = false;
-//     isSharpen = false;
-//     isGradient = false;
-//     isLaplacian = false;
-//     isGrayscale = false;
-//     isSepia = false;
-//     // Reset sliders to their default values
-//     contrastSlider.value = 0.5; // Set the default value for the contrast slider
-//     brightnessSlider.value = 0.0; // Set the default value for the brightness slider
-//     render();
-// });
-
-
-// const saveButton = document.getElementById('saveScreenshot');
-// const downloadLink = document.getElementById('downloadLink');
-// saveButton.addEventListener('click', () => {
-//   canvas.toBlob((blob) => {
-//     saveBlob(blob, `screencapture-${canvas.width}x${canvas.height}.jpg`);
-//   });
-// });
- 
-// const saveBlob = (function() {
-//   const a = document.createElement('a');
-//   document.body.appendChild(a);
-//   a.style.display = 'none';
-//   return function saveData(blob, fileName) {
-//      const url = window.URL.createObjectURL(blob);
-//      a.href = url;
-//      a.download = fileName;
-//      a.click();
-//   };
-// // }());
-// const saveScreenshotButton = document.getElementById("saveScreenshot");
-
-// // Add a click event listener to the button
-// saveScreenshotButton.addEventListener("click", saveScreenshot);
-// function saveScreenshot() {
-//     render();
-//     // Get the canvas element by its ID
-//     const canvas = document.getElementById("canvas");
-
-//     // Create an "a" element to trigger the download
-//     const a = document.createElement("a");
-
-//     // Convert the canvas content to a data URL with JPEG format
-//     const dataURL = canvas.toDataURL("image/jpeg");
-
-//     // Set the "href" attribute of the "a" element to the data URL
-//     a.href = dataURL;
-
-//     // Set the "download" attribute and file name
-//     a.download = "screenshot.jpg";
-
-//     // Trigger a click event on the "a" element to start the download
-//     a.click();
-// }
-
-// // Start rendering loop
-
 
 render();
 
@@ -745,8 +426,6 @@ p.addEventListener("click", function() {
     render();
   });
 
-  // Get a reference to the "Button 1" element by its ID
-
   // Get references to the "Move Light" and "Bounce Limit" sliders and their associated value display elements by their IDs
     const moveLightSlider = document.getElementById("moveLight");
     const moveLightValue = document.getElementById("moveLightValue");
@@ -755,24 +434,17 @@ p.addEventListener("click", function() {
 
     // Add event listeners to the sliders to track value changes
     moveLightSlider.addEventListener("input", function() {
-        // Execute JavaScript commands when the "Move Light" slider value changes
         const value = moveLightSlider.value;
-        // Update the value display element
         moveLightValue.textContent = value;
         lightPosition[0] = value;
         render();
         
-        // Add your custom logic here, using the updated slider value
-        // For example, you can update a 3D scene based on the "Move Light" slider value.
     });
 
     bounceLimitSlider.addEventListener("input", function() {
-        // Execute JavaScript commands when the "Bounce Limit" slider value changes
         const value = bounceLimitSlider.value;
         bounceLimit = value
         bounceLimitValue.textContent = value;
         render();
         
-        // Add your custom logic here, using the updated slider value
-        // For example, you can adjust a physics simulation based on the "Bounce Limit" slider value.
     });
